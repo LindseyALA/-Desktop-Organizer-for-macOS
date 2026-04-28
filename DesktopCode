@@ -1,0 +1,104 @@
+
+Copy
+
+#!/bin/bash
+# ============================================================
+#  Desktop Organizer for macOS
+#  Sorts ~/Desktop files into categorized subfolders.
+#  Run: bash organize_desktop.sh
+#  Add --dry-run to preview changes without moving anything.
+# ============================================================
+ 
+DESKTOP="$HOME/Desktop"
+DRY_RUN=false
+MOVED=0
+SKIPPED=0
+ 
+[[ "$1" == "--dry-run" ]] && DRY_RUN=true
+ 
+log() { echo "$1"; }
+move() {
+  local src="$1" dest_dir="$2"
+  mkdir -p "$dest_dir"
+  local filename
+  filename=$(basename "$src")
+  local dest="$dest_dir/$filename"
+ 
+  # Avoid overwriting — append a number if needed
+  if [[ -e "$dest" ]]; then
+    local base="${filename%.*}" ext="${filename##*.}"
+    local n=1
+    while [[ -e "$dest_dir/${base}_${n}.${ext}" ]]; do ((n++)); done
+    dest="$dest_dir/${base}_${n}.${ext}"
+  fi
+ 
+  if $DRY_RUN; then
+    log "  [DRY RUN] Would move: $filename → ${dest_dir/$DESKTOP\//}/"
+  else
+    mv "$src" "$dest" && log "  ✓ $filename → ${dest_dir/$DESKTOP\//}/" || log "  ✗ Failed: $filename"
+  fi
+  ((MOVED++))
+}
+ 
+log ""
+log "🗂  Desktop Organizer$(${DRY_RUN} && echo ' (DRY RUN)' || echo '')"
+log "   Target: $DESKTOP"
+log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+ 
+# ── Category definitions ────────────────────────────────────
+declare -A CATEGORIES
+ 
+CATEGORIES["Images"]="jpg jpeg png gif bmp tiff tif webp heic heif svg ico raw cr2 nef arw"
+CATEGORIES["Videos"]="mp4 mov avi mkv wmv flv m4v mpg mpeg webm 3gp"
+CATEGORIES["Audio"]="mp3 wav aac flac ogg m4a wma aiff opus"
+CATEGORIES["Documents"]="pdf doc docx txt rtf odt pages md markdown tex"
+CATEGORIES["Spreadsheets"]="xls xlsx csv ods numbers"
+CATEGORIES["Presentations"]="ppt pptx odp key"
+CATEGORIES["Archives"]="zip tar gz bz2 7z rar dmg pkg iso"
+CATEGORIES["Code"]="sh py js ts html css json xml yaml yml toml sql rb php go rs c cpp h swift"
+CATEGORIES["Applications"]="app exe"
+CATEGORIES["Fonts"]="ttf otf woff woff2"
+CATEGORIES["Design"]="psd ai sketch figma xd afdesign afphoto"
+CATEGORIES["eBooks"]="epub mobi azw3 djvu"
+ 
+# Build reverse lookup: ext → category
+declare -A EXT_MAP
+for category in "${!CATEGORIES[@]}"; do
+  for ext in ${CATEGORIES[$category]}; do
+    EXT_MAP[$ext]="$category"
+  done
+done
+ 
+# ── Process files ───────────────────────────────────────────
+shopt -s nullglob
+for item in "$DESKTOP"/*; do
+  # Skip folders that already exist on the desktop
+  [[ -d "$item" ]] && { ((SKIPPED++)); continue; }
+ 
+  filename=$(basename "$item")
+ 
+  # Skip hidden files and .DS_Store
+  [[ "$filename" == .* ]] && continue
+ 
+  # Get lowercase extension
+  ext="${filename##*.}"
+  ext="${ext,,}"
+ 
+  if [[ -n "${EXT_MAP[$ext]}" ]]; then
+    move "$item" "$DESKTOP/${EXT_MAP[$ext]}"
+  else
+    move "$item" "$DESKTOP/Other"
+  fi
+done
+shopt -u nullglob
+ 
+# ── Summary ─────────────────────────────────────────────────
+log ""
+log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if $DRY_RUN; then
+  log "  Preview complete. $MOVED file(s) would be moved."
+  log "  Run without --dry-run to apply changes."
+else
+  log "  Done! $MOVED file(s) organized. $SKIPPED folder(s) skipped."
+fi
+log ""
